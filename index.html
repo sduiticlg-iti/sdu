@@ -172,6 +172,7 @@
     <button class="tabbtn active" onclick="switchTab('admissions')">📋 Admission Details</button>
     <button class="tabbtn" onclick="switchTab('fees')">💰 Fees & Balance</button>
     <button class="tabbtn" onclick="switchTab('reports')">📊 Reports & Backup</button>
+    <button class="tabbtn" onclick="switchTab('staff')">👤 Staff Access</button>
   </div>
 </header>
 
@@ -289,6 +290,30 @@
     </div>
   </div>
 
+  <!-- ============ TAB 4: STAFF ACCESS ============ -->
+  <div class="tabpanel" id="tab-staff">
+    <div class="card primary">
+      <h2><span class="eyebrow">New</span> Create a Staff Login</h2>
+      <p class="desc">Creates a new email/password login for this dashboard. They'll be able to log in immediately with it.</p>
+      <div class="row">
+        <div class="field grow"><label>Staff Email</label><input type="email" id="stEmail" placeholder="name@example.com"></div>
+        <div class="field grow"><label>Password</label><input type="text" id="stPassword" placeholder="At least 6 characters"></div>
+        <button class="btn-gold" onclick="createStaffLogin()">Create Login</button>
+      </div>
+      <div id="stMsg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">All</span> Staff Logins</h2>
+      <p class="desc">Toggle a login to Inactive to block them from getting in — they'll be signed out automatically the next time they try to log in. This can't force out someone already mid-session; it blocks their next login attempt.</p>
+      <table>
+        <thead><tr><th>Email</th><th>Status</th><th>Added</th><th></th></tr></thead>
+        <tbody id="staffBody"></tbody>
+      </table>
+      <div class="hint" id="staffEmpty">No staff logins yet.</div>
+    </div>
+  </div>
+
   <footer>Sri Devaraj Urs ITI College, Holalkere — Fee Management System</footer>
 </div>
 </div>
@@ -361,8 +386,16 @@ async function doForgotPassword(){
 }
 
 if(firebaseReady){
-  auth.onAuthStateChanged(user => {
+  auth.onAuthStateChanged(async user => {
     if(user){
+      // Check this account's status in Firestore before letting them in
+      const allowed = await checkUserAllowedAndBootstrap(user);
+      if(!allowed){
+        await auth.signOut();
+        document.getElementById('loginMsg').textContent = 'This login has been deactivated. Contact your admin.';
+        document.getElementById('loginMsg').className = 'msg err';
+        return;
+      }
       document.getElementById('loginScreen').classList.add('hidden');
       document.getElementById('dashboard').classList.remove('hidden');
       document.getElementById('adminEmail').textContent = user.email;
@@ -374,6 +407,89 @@ if(firebaseReady){
   });
 } else {
   document.getElementById('configWarning').classList.remove('hidden');
+}
+
+/* ================= USER MANAGEMENT (Staff Access) ================= */
+
+// Runs on every login. If this is the very first time this account has
+// logged in, it auto-registers itself as an admin (bootstrap trust — this
+// covers the original account you created directly in Firebase Console).
+// After that, it just checks the active flag.
+async function checkUserAllowedAndBootstrap(user){
+  try{
+    const doc = await db.collection('users').doc(user.uid).get();
+    if(!doc.exists){
+      await db.collection('users').doc(user.uid).set({
+        email: user.email, role: 'admin', active: true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      return true;
+    }
+    return doc.data().active !== false;
+  }catch(e){
+    console.error('User check failed', e);
+    return true; // fail open rather than lock everyone out on a network hiccup
+  }
+}
+
+async function createStaffLogin(){
+  const msgEl = document.getElementById('stMsg');
+  const email = document.getElementById('stEmail').value.trim();
+  const password = document.getElementById('stPassword').value;
+  if(!email || !password || password.length < 6){
+    msgEl.textContent = 'Enter an email and a password of at least 6 characters.';
+    msgEl.className = 'msg err';
+    return;
+  }
+  msgEl.textContent = 'Creating login...'; msgEl.className = 'msg info';
+  try{
+    // Use a SECONDARY Firebase app instance so creating this account
+    // doesn't sign the current admin out of their own session.
+    const secondaryApp = firebase.initializeApp(firebaseConfig, 'Secondary-' + Date.now());
+    const secondaryAuth = secondaryApp.auth();
+    const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+    const newUid = cred.user.uid;
+    await secondaryAuth.signOut();
+    await secondaryApp.delete();
+
+    await db.collection('users').doc(newUid).set({
+      email, role: 'staff', active: true,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    msgEl.textContent = `Login created for ${email}. Share the password with them separately.`;
+    msgEl.className = 'msg ok';
+    document.getElementById('stEmail').value = '';
+    document.getElementById('stPassword').value = '';
+    await renderStaffTable();
+  }catch(e){
+    msgEl.textContent = 'Could not create login: ' + (e.message || '');
+    msgEl.className = 'msg err';
+  }
+}
+
+async function renderStaffTable(){
+  const body = document.getElementById('staffBody');
+  const snap = await db.collection('users').orderBy('createdAt', 'desc').get();
+  const users = snap.docs.map(d => ({uid: d.id, ...d.data()}));
+  document.getElementById('staffEmpty').classList.toggle('hidden', users.length !== 0);
+  body.innerHTML = users.map(u => {
+    const dateStr = u.createdAt && u.createdAt.toDate ? u.createdAt.toDate().toLocaleDateString('en-IN') : '—';
+    const isActive = u.active !== false;
+    return `<tr>
+      <td>${u.email}${u.role==='admin' ? ' <span class="pill nil">ADMIN</span>' : ''}</td>
+      <td>${isActive ? '<span class="pill nil">Active</span>' : '<span class="pill due">Inactive</span>'}</td>
+      <td>${dateStr}</td>
+      <td><button class="btn-ghost" style="font-size:11px;padding:6px 12px;" onclick="toggleUserActive('${u.uid}', ${isActive})">
+        ${isActive ? 'Deactivate' : 'Activate'}
+      </button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function toggleUserActive(uid, currentlyActive){
+  await db.collection('users').doc(uid).set({active: !currentlyActive}, {merge:true});
+  await renderStaffTable();
 }
 
 /* ================= TABS ================= */
@@ -661,6 +777,7 @@ async function initDashboard(){
   renderSummary();
   renderAdmissionsTable();
   renderMasterTable();
+  await renderStaffTable();
 }
 </script>
 </body>
