@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDU ITI College — Student Fee Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Firebase (fill in YOUR project config below — see SETUP_GUIDE.md) -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --navy:#14213D; --navy-2:#1F3A63; --cream:#FAF7F0;
+    --gold:#C99A3D; --gold-dark:#A87D28;
+    --green:#1F7A4D; --green-bg:#E4F3EA;
+    --red:#B3261E; --red-bg:#FBEAE9;
+    --ink:#1B1F27; --muted:#6B7280; --card:#FFFFFF; --border:#E4DFD3;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--cream);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 20px 60px;}
+  .hidden{display:none !important;}
+
+  /* ---------- Login ---------- */
+  #loginScreen{
+    position:fixed;inset:0;z-index:1000;
+    background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  }
+  .login-box{background:var(--card);border-radius:14px;padding:36px 34px;max-width:380px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.35);text-align:center;}
+  .login-box .stamp-mini{margin:0 auto 16px;border:2px dashed var(--gold);border-radius:50%;width:64px;height:64px;display:flex;align-items:center;justify-content:center;text-align:center;font-family:'Fraunces',serif;font-size:10px;line-height:1.2;color:var(--gold-dark);}
+  .login-box h1{font-family:'Fraunces',serif;font-size:19px;color:var(--navy);margin:0 0 4px;}
+  .login-box p.desc{font-size:13px;color:var(--muted);margin:0 0 22px;}
+  .login-box input{width:100%;padding:11px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;margin-bottom:10px;}
+  .login-box input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,154,61,.15);}
+  .login-box button{width:100%;padding:12px;font-size:14px;}
+  #loginMsg{margin-top:12px;font-size:13px;font-weight:600;min-height:18px;}
+  #loginMsg.err{color:var(--red);}
+  #loginMsg.ok{color:var(--green);}
+  .login-box .switch{margin-top:16px;font-size:12px;color:var(--muted);}
+  .login-box .switch a{color:var(--gold-dark);cursor:pointer;text-decoration:underline;font-weight:600;}
+  #configWarning{
+    background:#FBEAE9;border:1px solid #E8B4AF;color:#8A2A22;font-size:12px;
+    border-radius:8px;padding:10px 12px;margin-bottom:16px;text-align:left;line-height:1.5;
+  }
+
+  /* ---------- Header ---------- */
+  header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);color:#fff;padding:24px 20px 0;}
+  header .inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding-bottom:20px;}
+  header h1{font-family:'Fraunces',serif;font-weight:600;font-size:24px;margin:0 0 4px;}
+  header p{margin:0;color:#C9D3E4;font-size:12px;letter-spacing:.4px;text-transform:uppercase;}
+  .admin-tag{font-size:11px;color:#C9D3E4;text-align:right;}
+  .admin-tag button{margin-top:6px;font-size:11px;padding:6px 12px;}
+
+  /* ---------- Tabs ---------- */
+  .tabbar{max-width:1100px;margin:0 auto;padding:0 20px;display:flex;gap:4px;background:var(--navy-2);border-radius:10px 10px 0 0;overflow:hidden;}
+  .tabbtn{
+    flex:1;background:transparent;border:none;color:#C9D3E4;padding:14px 10px;font-size:13px;
+    font-weight:600;cursor:pointer;border-radius:0;font-family:'Inter',sans-serif;
+    border-bottom:3px solid transparent;
+  }
+  .tabbtn.active{color:#fff;background:rgba(255,255,255,.08);border-bottom:3px solid var(--gold);}
+  .tabpanel{display:none;}
+  .tabpanel.active{display:block;}
+
+  /* ---------- Cards ---------- */
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px 24px;margin:22px 0;box-shadow:0 1px 3px rgba(20,33,61,.05);}
+  .card h2{font-family:'Fraunces',serif;font-size:17px;font-weight:600;margin:0 0 6px;color:var(--navy);display:flex;align-items:center;gap:8px;}
+  .card .desc{font-size:13px;color:var(--muted);margin:0 0 16px;}
+  .card h2 .eyebrow{font-family:'Inter',sans-serif;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--gold-dark);background:#FBF3E1;border:1px solid #EFDDB2;padding:2px 8px;border-radius:20px;font-weight:700;}
+  .card.primary{border:2px solid var(--gold);}
+
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;}
+  .field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:140px;}
+  .field label{font-size:12px;font-weight:600;color:var(--muted);}
+  .field input,.field select{padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;background:#fff;color:var(--ink);}
+  .field input:focus,.field select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,154,61,.15);}
+  .field.grow{flex:2;min-width:200px;}
+
+  button{font-family:'Inter',sans-serif;font-weight:600;font-size:13px;border:none;border-radius:8px;padding:11px 20px;cursor:pointer;}
+  button:active{transform:translateY(1px);}
+  .btn-primary{background:var(--navy);color:#fff;}
+  .btn-primary:hover{background:var(--navy-2);}
+  .btn-gold{background:var(--gold);color:#2b1d00;}
+  .btn-gold:hover{background:var(--gold-dark);color:#fff;}
+  .btn-ghost{background:transparent;color:var(--navy);border:1px solid var(--border);}
+  .btn-ghost:hover{border-color:var(--navy);}
+  .btn-danger-link{background:none;color:var(--red);font-size:12px;padding:2px 6px;text-decoration:underline;}
+
+  .msg{margin-top:12px;font-size:13px;font-weight:600;}
+  .msg.ok{color:var(--green);}
+  .msg.err{color:var(--red);}
+  .msg.info{color:var(--gold-dark);}
+
+  .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:22px 0;}
+  .stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px;box-shadow:0 1px 3px rgba(20,33,61,.06);}
+  .stat .label{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:600;}
+  .stat .value{font-family:'Fraunces',serif;font-size:24px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums;}
+  .stat.collected .value{color:var(--green);}
+  .stat.pending .value{color:var(--red);}
+  .stat.donations .value{color:var(--gold-dark);}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;padding:8px 10px;border-bottom:2px solid var(--border);}
+  td{padding:9px 10px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;}
+  tr:last-child td{border-bottom:none;}
+  tr.clickable{cursor:pointer;}
+  tr.clickable:hover{background:#FBF8F1;}
+  .pill{padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+  .pill.nil{background:var(--green-bg);color:var(--green);}
+  .pill.due{background:var(--red-bg);color:var(--red);}
+
+  .stamp{border:3px double;border-radius:8px;padding:8px 16px;font-family:'Fraunces',serif;font-weight:700;font-size:13px;letter-spacing:.5px;white-space:nowrap;}
+  .stamp.paid{border-color:var(--green);color:var(--green);background:var(--green-bg);}
+  .stamp.due{border-color:var(--red);color:var(--red);background:var(--red-bg);}
+  .figures{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:8px;}
+  .figure{background:var(--cream);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+  .figure .label{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:600;letter-spacing:.4px;}
+  .figure .value{font-family:'Fraunces',serif;font-size:18px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;}
+
+  .hint{font-size:12px;color:var(--muted);margin-top:8px;}
+  #masterFilter, #admFilter{max-width:260px;}
+  footer{text-align:center;color:var(--muted);font-size:12px;padding:20px 0;}
+
+  @media (max-width:640px){
+    .summary{grid-template-columns:repeat(2,1fr);}
+    .figures{grid-template-columns:repeat(2,1fr);}
+    .tabbar{flex-wrap:wrap;}
+    .tabbtn{flex:1 1 45%;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="stamp-mini">SDU<br>ITI</div>
+    <h1>Admin Login</h1>
+    <p class="desc">Sri Devaraj Urs ITI College — Fee Management</p>
+    <div id="configWarning" class="hidden">
+      ⚠ Firebase isn't configured yet. Open this file, find <code>firebaseConfig</code> near the top of the script, and paste in your own project's keys. See SETUP_GUIDE.md.
+    </div>
+    <input type="email" id="loginEmail" placeholder="Admin email" autocomplete="username">
+    <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password">
+    <button class="btn-gold" onclick="doLogin()">Login</button>
+    <div id="loginMsg" class="msg"></div>
+    <div class="switch">Forgot password? <a onclick="doForgotPassword()">Reset it</a></div>
+  </div>
+</div>
+
+<!-- ================= DASHBOARD ================= -->
+<div id="dashboard" class="hidden">
+
+<header>
+  <div class="inner">
+    <div>
+      <h1>Sri Devaraj Urs ITI College, Holalkere</h1>
+      <p>Student Fee Management</p>
+    </div>
+    <div class="admin-tag">
+      Logged in as <span id="adminEmail">—</span><br>
+      <button class="btn-ghost" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+  <div class="tabbar">
+    <button class="tabbtn active" onclick="switchTab('admissions')">📋 Admission Details</button>
+    <button class="tabbtn" onclick="switchTab('fees')">💰 Fees & Balance</button>
+    <button class="tabbtn" onclick="switchTab('reports')">📊 Reports & Backup</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ============ TAB 1: ADMISSIONS ============ -->
+  <div class="tabpanel active" id="tab-admissions">
+    <div class="card primary">
+      <h2><span class="eyebrow">New / Edit</span> Student Admission Details</h2>
+      <p class="desc">Enter a new Admission No to create a student, or an existing one to load and edit their details.</p>
+      <div class="row">
+        <div class="field"><label>Admission No</label><input list="idListA" id="adId" placeholder="e.g. ITI101" onblur="tryLoadForEdit()"></div>
+        <div class="field grow"><label>Student Name</label><input id="adName" placeholder="Full name"></div>
+        <div class="field grow"><label>Father's / Guardian Name</label><input id="adFather" placeholder="Full name"></div>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <div class="field"><label>Class / Year</label>
+          <select id="adClass"><option>1st Year</option><option>2nd Year</option></select>
+        </div>
+        <div class="field"><label>Session</label><input id="adSession" placeholder="e.g. 2024-25"></div>
+        <div class="field"><label>Contact Number</label><input id="adContact" type="tel" placeholder="10-digit mobile"></div>
+        <div class="field"><label>Course / Trade</label>
+          <select id="adCourse">
+            <option>Diploma</option><option>Fitter</option><option>Electrician</option>
+            <option>COPA</option><option>Welder</option><option>Mechanic</option>
+            <option>Machinist</option><option>Wireman</option><option>Other</option>
+          </select>
+        </div>
+        <div class="field"><label>Total Course Fee (₹)</label><input id="adFee" type="number" min="0" placeholder="0"></div>
+      </div>
+      <div class="row" style="margin-top:16px;">
+        <button class="btn-gold" onclick="saveAdmission()">Save Student Details</button>
+        <button class="btn-ghost" onclick="clearAdmissionForm()">Clear Form</button>
+      </div>
+      <div id="admMsg" class="msg"></div>
+      <datalist id="idListA"></datalist>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">All</span> Admitted Students</h2>
+      <input id="admFilter" placeholder="Filter by name or admission no..." oninput="renderAdmissionsTable()">
+      <table>
+        <thead><tr><th>Admission No</th><th>Name</th><th>Father/Guardian</th><th>Class</th><th>Session</th><th>Course</th><th>Contact</th></tr></thead>
+        <tbody id="admissionsBody"></tbody>
+      </table>
+      <div class="hint" id="admEmpty">No students admitted yet.</div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 2: FEES & BALANCE ============ -->
+  <div class="tabpanel" id="tab-fees">
+    <div class="summary">
+      <div class="stat"><div class="label">Students</div><div class="value" id="statCount">0</div></div>
+      <div class="stat collected"><div class="label">Total Collected</div><div class="value" id="statCollected">₹0</div></div>
+      <div class="stat pending"><div class="label">Total Pending</div><div class="value" id="statPending">₹0</div></div>
+      <div class="stat donations"><div class="label">Total Donations</div><div class="value" id="statDonations">₹0</div></div>
+    </div>
+
+    <div class="card primary">
+      <h2><span class="eyebrow">Record</span> a Payment</h2>
+      <p class="desc">Type the Admission No — if the student exists, their record loads automatically below.</p>
+      <div class="row">
+        <div class="field"><label>Admission No</label><input list="idListF" id="payId" placeholder="e.g. ITI101" oninput="livePreview()"></div>
+        <div class="field"><label>Date</label><input id="payDate" type="date"></div>
+        <div class="field"><label>Fee Amount (₹)</label><input id="payAmount" type="number" min="0" placeholder="0"></div>
+        <div class="field"><label>Donation (₹) — optional</label><input id="payDonation" type="number" min="0" placeholder="0"></div>
+        <div class="field grow"><label>Remarks</label><input id="payRemarks" placeholder="e.g. 2nd installment"></div>
+        <button class="btn-gold" onclick="handlePaymentSubmit()">Save Payment</button>
+      </div>
+      <div id="payMsg" class="msg"></div>
+      <datalist id="idListF"></datalist>
+    </div>
+
+    <div class="card hidden" id="detailCard">
+      <h2><span class="eyebrow">Ledger</span> Student Balance</h2>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;margin-bottom:14px;">
+        <div>
+          <h3 id="dName" style="font-family:'Fraunces',serif;font-size:19px;margin:0 0 2px;color:var(--navy);">—</h3>
+          <div class="hint" id="dSub">—</div>
+          <div class="hint" id="dProfile">—</div>
+        </div>
+        <div class="stamp" id="dStamp">—</div>
+      </div>
+      <div class="figures">
+        <div class="figure"><div class="label">Total Fee</div><div class="value" id="dTotal">₹0</div></div>
+        <div class="figure"><div class="label">Previously Paid</div><div class="value" id="dPaid">₹0</div></div>
+        <div class="figure"><div class="label">Balance Due</div><div class="value" id="dBalance">₹0</div></div>
+        <div class="figure"><div class="label">Donations</div><div class="value" id="dDonations">₹0</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Date</th><th>Fee</th><th>Donation</th><th>Total</th><th>Remarks</th><th>Balance After</th><th></th></tr></thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+      <div class="hint" id="historyEmpty">No payments recorded yet.</div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 3: REPORTS ============ -->
+  <div class="tabpanel" id="tab-reports">
+    <div class="card">
+      <h2><span class="eyebrow">Weekly</span> Download Excel Backup</h2>
+      <p class="desc">Downloads a full .xlsx copy of every student and their complete payment history — keep one saved regularly.</p>
+      <button class="btn-primary" onclick="exportToExcel()">⬇ Download Excel Backup</button>
+      <div class="hint" id="backupMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2><span class="eyebrow">All</span> Every Student — Fee Status</h2>
+      <input id="masterFilter" placeholder="Filter by name or admission no..." oninput="renderMasterTable()">
+      <table>
+        <thead><tr><th>Admission No</th><th>Name</th><th>Class</th><th>Session</th><th>Course</th><th>Total Fee</th><th>Paid</th><th>Balance</th><th>Donations</th></tr></thead>
+        <tbody id="masterBody"></tbody>
+      </table>
+      <div class="hint" id="masterEmpty">No students added yet.</div>
+    </div>
+  </div>
+
+  <footer>Sri Devaraj Urs ITI College, Holalkere — Fee Management System</footer>
+</div>
+</div>
+
+<script>
+/* =====================================================================
+   FIREBASE CONFIG — replace with YOUR project's config.
+   Get this from: Firebase Console → Project Settings → General →
+   "Your apps" → Web app → SDK setup and configuration.
+   See SETUP_GUIDE.md for full step-by-step instructions.
+===================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyAY4HLKTghq8sF3w4Jc2_1MfRd0OuV2ZAc",
+  authDomain: "sri-devaraj-urs-iti-college.firebaseapp.com",
+  projectId: "sri-devaraj-urs-iti-college",
+  storageBucket: "sri-devaraj-urs-iti-college.firebasestorage.app",
+  messagingSenderId: "646375454869",
+  appId: "1:646375454869:web:c656194a836813768a039c"
+};
+
+let firebaseReady = false;
+try{
+  if(firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY"){
+    firebase.initializeApp(firebaseConfig);
+    firebaseReady = true;
+  }
+}catch(e){ console.error('Firebase init failed', e); }
+
+const auth = firebaseReady ? firebase.auth() : null;
+const db = firebaseReady ? firebase.firestore() : null;
+
+/* ================= LOGIN ================= */
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function fmt(n){ return '₹' + Math.round(n).toLocaleString('en-IN'); }
+
+async function doLogin(){
+  const msgEl = document.getElementById('loginMsg');
+  if(!firebaseReady){
+    msgEl.textContent = 'Firebase is not configured yet — see the warning above.';
+    msgEl.className = 'msg err';
+    return;
+  }
+  const email = document.getElementById('loginEmail').value.trim();
+  const pw = document.getElementById('loginPassword').value;
+  if(!email || !pw){ msgEl.textContent = 'Enter email and password.'; msgEl.className = 'msg err'; return; }
+  msgEl.textContent = 'Signing in...'; msgEl.className = 'msg info';
+  try{
+    await auth.signInWithEmailAndPassword(email, pw);
+  }catch(e){
+    msgEl.textContent = 'Login failed: ' + (e.message || 'check your email/password.');
+    msgEl.className = 'msg err';
+  }
+}
+async function doLogout(){
+  if(auth) await auth.signOut();
+}
+async function doForgotPassword(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const msgEl = document.getElementById('loginMsg');
+  if(!firebaseReady){ msgEl.textContent = 'Firebase is not configured yet.'; msgEl.className = 'msg err'; return; }
+  if(!email){ msgEl.textContent = 'Type your admin email above first.'; msgEl.className = 'msg err'; return; }
+  try{
+    await auth.sendPasswordResetEmail(email);
+    msgEl.textContent = 'Password reset email sent — check your inbox.';
+    msgEl.className = 'msg ok';
+  }catch(e){
+    msgEl.textContent = 'Could not send reset email: ' + (e.message || '');
+    msgEl.className = 'msg err';
+  }
+}
+
+if(firebaseReady){
+  auth.onAuthStateChanged(user => {
+    if(user){
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('dashboard').classList.remove('hidden');
+      document.getElementById('adminEmail').textContent = user.email;
+      initDashboard();
+    } else {
+      document.getElementById('dashboard').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+  });
+} else {
+  document.getElementById('configWarning').classList.remove('hidden');
+}
+
+/* ================= TABS ================= */
+function switchTab(name){
+  document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tabbtn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+/* ================= FIRESTORE DATA LAYER ================= */
+let studentsCache = []; // [{id, name, father, className, session, contact, course, totalFee, totalPaid, totalDonations, balance}]
+
+async function fetchAllStudents(){
+  const snap = await db.collection('students').get();
+  studentsCache = snap.docs.map(doc => {
+    const d = doc.data();
+    const totalPaid = (d.payments||[]).reduce((s,p)=>s+p.amount, 0);
+    const totalDonations = (d.payments||[]).reduce((s,p)=>s+(p.donation||0), 0);
+    return {id: doc.id, name: d.name, father: d.father||'', className: d.className||'', session: d.session||'',
+             contact: d.contact||'', course: d.course, totalFee: d.totalFee, totalPaid, totalDonations,
+             balance: d.totalFee - totalPaid};
+  });
+}
+async function getStudentDoc(id){
+  const doc = await db.collection('students').doc(id).get();
+  return doc.exists ? doc.data() : null;
+}
+async function saveStudentDoc(id, data){
+  await db.collection('students').doc(id).set(data, {merge:true});
+}
+function findInCache(id){
+  return studentsCache.find(s => s.id.toLowerCase() === id.toLowerCase());
+}
+
+/* ================= RENDER: shared ================= */
+function renderIdLists(){
+  const opts = studentsCache.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  document.getElementById('idListA').innerHTML = opts;
+  document.getElementById('idListF').innerHTML = opts;
+}
+function renderSummary(){
+  document.getElementById('statCount').textContent = studentsCache.length;
+  document.getElementById('statCollected').textContent = fmt(studentsCache.reduce((s,x)=>s+x.totalPaid,0));
+  document.getElementById('statPending').textContent = fmt(studentsCache.reduce((s,x)=>s+Math.max(x.balance,0),0));
+  document.getElementById('statDonations').textContent = fmt(studentsCache.reduce((s,x)=>s+x.totalDonations,0));
+}
+
+/* ================= TAB 1: ADMISSIONS ================= */
+function renderAdmissionsTable(){
+  const filter = document.getElementById('admFilter').value.trim().toLowerCase();
+  const rows = studentsCache
+    .filter(s => !filter || s.id.toLowerCase().includes(filter) || s.name.toLowerCase().includes(filter))
+    .sort((a,b) => a.name.localeCompare(b.name));
+  document.getElementById('admEmpty').classList.toggle('hidden', studentsCache.length !== 0);
+  document.getElementById('admissionsBody').innerHTML = rows.map(s => `
+    <tr class="clickable" onclick="loadIntoAdmissionForm('${s.id}')">
+      <td>${s.id}</td><td>${s.name}</td><td>${s.father||'—'}</td><td>${s.className||'—'}</td>
+      <td>${s.session||'—'}</td><td>${s.course}</td><td>${s.contact||'—'}</td>
+    </tr>`).join('');
+}
+
+async function tryLoadForEdit(){
+  const id = document.getElementById('adId').value.trim();
+  if(!id) return;
+  if(findInCache(id)) await loadIntoAdmissionForm(id);
+}
+
+async function loadIntoAdmissionForm(id){
+  const d = await getStudentDoc(id);
+  if(!d) return;
+  document.getElementById('adId').value = id;
+  document.getElementById('adName').value = d.name || '';
+  document.getElementById('adFather').value = d.father || '';
+  document.getElementById('adClass').value = d.className || '1st Year';
+  document.getElementById('adSession').value = d.session || '';
+  document.getElementById('adContact').value = d.contact || '';
+  document.getElementById('adCourse').value = d.course || 'Diploma';
+  document.getElementById('adFee').value = d.totalFee || '';
+  document.getElementById('admMsg').textContent = `Editing existing student: ${d.name}`;
+  document.getElementById('admMsg').className = 'msg info';
+}
+
+function clearAdmissionForm(){
+  ['adId','adName','adFather','adSession','adContact','adFee'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('adClass').value = '1st Year';
+  document.getElementById('adCourse').value = 'Diploma';
+  document.getElementById('admMsg').textContent = '';
+}
+
+async function saveAdmission(){
+  const msgEl = document.getElementById('admMsg');
+  const id = document.getElementById('adId').value.trim();
+  const name = document.getElementById('adName').value.trim();
+  const father = document.getElementById('adFather').value.trim();
+  const className = document.getElementById('adClass').value;
+  const session = document.getElementById('adSession').value.trim();
+  const contact = document.getElementById('adContact').value.trim();
+  const course = document.getElementById('adCourse').value;
+  const totalFee = parseFloat(document.getElementById('adFee').value) || 0;
+
+  if(!id || !name || !totalFee){
+    msgEl.textContent = 'Admission No, Name, and Total Fee are required.';
+    msgEl.className = 'msg err';
+    return;
+  }
+
+  const existing = await getStudentDoc(id);
+  const payments = existing ? (existing.payments || []) : [];
+  await saveStudentDoc(id, {name, father, className, session, contact, course, totalFee, payments});
+
+  msgEl.textContent = `Saved: ${name} (${id})`;
+  msgEl.className = 'msg ok';
+  await fetchAllStudents();
+  renderIdLists(); renderSummary(); renderAdmissionsTable(); renderMasterTable();
+  clearAdmissionForm();
+}
+
+/* ================= TAB 2: FEES & BALANCE ================= */
+async function livePreview(){
+  const id = document.getElementById('payId').value.trim();
+  if(id && findInCache(id)) await showDetail(id);
+}
+
+async function handlePaymentSubmit(){
+  const id = document.getElementById('payId').value.trim();
+  const date = document.getElementById('payDate').value || todayStr();
+  const amount = parseFloat(document.getElementById('payAmount').value) || 0;
+  const donation = parseFloat(document.getElementById('payDonation').value) || 0;
+  const remarks = document.getElementById('payRemarks').value.trim();
+  const msgEl = document.getElementById('payMsg');
+
+  if(!id){ msgEl.textContent = 'Enter an Admission No first.'; msgEl.className = 'msg err'; return; }
+  if(amount <= 0 && donation <= 0){ msgEl.textContent = 'Enter a fee amount or a donation amount.'; msgEl.className = 'msg err'; return; }
+
+  const existing = await getStudentDoc(id);
+  if(!existing){
+    msgEl.textContent = `"${id}" isn't admitted yet. Add them first in the Admission Details tab.`;
+    msgEl.className = 'msg err';
+    return;
+  }
+
+  const payments = existing.payments || [];
+  payments.push({date, amount, donation, remarks});
+  await saveStudentDoc(id, {payments});
+
+  msgEl.textContent = `Payment of ${fmt(amount + donation)} recorded for ${existing.name}.`;
+  msgEl.className = 'msg ok';
+
+  await fetchAllStudents();
+  renderIdLists(); renderSummary(); renderMasterTable();
+  await showDetail(id);
+
+  document.getElementById('payId').value = '';
+  document.getElementById('payAmount').value = '';
+  document.getElementById('payDonation').value = '';
+  document.getElementById('payRemarks').value = '';
+}
+
+async function showDetail(id){
+  const d = await getStudentDoc(id);
+  if(!d) return;
+  const totalPaid = (d.payments||[]).reduce((s,p)=>s+p.amount, 0);
+  const totalDonations = (d.payments||[]).reduce((s,p)=>s+(p.donation||0), 0);
+  const balance = d.totalFee - totalPaid;
+
+  document.getElementById('dName').textContent = d.name;
+  document.getElementById('dSub').textContent = `${id} · ${d.course}`;
+  const bits = [];
+  if(d.father) bits.push(`Father/Guardian: ${d.father}`);
+  if(d.className) bits.push(d.className);
+  if(d.session) bits.push(`Session ${d.session}`);
+  if(d.contact) bits.push(d.contact);
+  document.getElementById('dProfile').textContent = bits.join(' · ') || '';
+  document.getElementById('dTotal').textContent = fmt(d.totalFee);
+  document.getElementById('dPaid').textContent = fmt(totalPaid);
+  document.getElementById('dBalance').textContent = balance <= 0 ? 'NIL' : fmt(balance);
+  document.getElementById('dDonations').textContent = fmt(totalDonations);
+
+  const stampEl = document.getElementById('dStamp');
+  if(balance <= 0){ stampEl.textContent = 'PAID IN FULL'; stampEl.className = 'stamp paid'; }
+  else { stampEl.textContent = fmt(balance) + ' DUE'; stampEl.className = 'stamp due'; }
+
+  renderHistory(id, d);
+  document.getElementById('detailCard').classList.remove('hidden');
+}
+
+function renderHistory(id, d){
+  const body = document.getElementById('historyBody');
+  const payments = d.payments || [];
+  document.getElementById('historyEmpty').classList.toggle('hidden', payments.length !== 0);
+  let running = 0;
+  body.innerHTML = payments.map((p, i) => {
+    running += p.amount;
+    const balAfter = d.totalFee - running;
+    const donation = p.donation || 0;
+    return `<tr>
+      <td>${p.date}</td><td>${fmt(p.amount)}</td><td>${donation?fmt(donation):'—'}</td>
+      <td>${fmt(p.amount+donation)}</td><td>${p.remarks||'—'}</td>
+      <td>${balAfter<=0?'<span class="pill nil">NIL</span>':'<span class="pill due">'+fmt(balAfter)+'</span>'}</td>
+      <td><button class="btn-danger-link" onclick="removePayment('${id}', ${i})">Remove</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function removePayment(id, i){
+  if(!confirm('Remove this payment entry?')) return;
+  const d = await getStudentDoc(id);
+  const payments = d.payments || [];
+  payments.splice(i, 1);
+  await saveStudentDoc(id, {payments});
+  await fetchAllStudents();
+  renderSummary(); renderMasterTable();
+  await showDetail(id);
+}
+
+/* ================= TAB 3: REPORTS ================= */
+function renderMasterTable(){
+  const filter = document.getElementById('masterFilter').value.trim().toLowerCase();
+  const rows = studentsCache
+    .filter(s => !filter || s.id.toLowerCase().includes(filter) || s.name.toLowerCase().includes(filter))
+    .sort((a,b) => a.name.localeCompare(b.name));
+  document.getElementById('masterEmpty').classList.toggle('hidden', studentsCache.length !== 0);
+  document.getElementById('masterBody').innerHTML = rows.map(s => `
+    <tr class="clickable" onclick="switchTab('fees'); document.getElementById('payId').value='${s.id}'; livePreview();">
+      <td>${s.id}</td><td>${s.name}</td><td>${s.className||'—'}</td><td>${s.session||'—'}</td><td>${s.course}</td>
+      <td>${fmt(s.totalFee)}</td><td>${fmt(s.totalPaid)}</td>
+      <td>${s.balance<=0?'<span class="pill nil">NIL</span>':'<span class="pill due">'+fmt(s.balance)+'</span>'}</td>
+      <td>${fmt(s.totalDonations)}</td>
+    </tr>`).join('');
+}
+
+async function exportToExcel(){
+  const msgEl = document.getElementById('backupMsg');
+  msgEl.textContent = 'Preparing backup...';
+  try{
+    if(studentsCache.length === 0){ msgEl.textContent = 'No student data to back up yet.'; return; }
+    const entryRows = [], summaryRows = [];
+    let slNo = 1;
+    const sorted = [...studentsCache].sort((a,b) => a.name.localeCompare(b.name));
+    for(const entry of sorted){
+      const d = await getStudentDoc(entry.id);
+      if(!d) continue;
+      let running = 0;
+      for(const p of (d.payments||[])){
+        running += p.amount;
+        const balAfter = d.totalFee - running;
+        const donation = p.donation || 0;
+        entryRows.push({
+          'Sl.No': slNo++, 'Date': p.date, 'Admission No': entry.id, 'Student Name': d.name,
+          "Father's/Guardian Name": d.father||'', 'Class': d.className||'', 'Session': d.session||'',
+          'Contact': d.contact||'', 'Course': d.course, 'Total Fee (₹)': d.totalFee,
+          'Fee Amount (₹)': p.amount, 'Donation (₹)': donation, 'Total Amount (₹)': p.amount+donation,
+          'Balance (₹)': balAfter<=0?'NIL':balAfter, 'Remarks': p.remarks||''
+        });
+      }
+      summaryRows.push({
+        'Admission No': entry.id, 'Student Name': d.name, "Father's/Guardian Name": d.father||'',
+        'Class': d.className||'', 'Session': d.session||'', 'Contact': d.contact||'', 'Course': d.course,
+        'Total Fee (₹)': d.totalFee, 'Total Deposited (₹)': entry.totalPaid,
+        'Balance Due (₹)': entry.balance<=0?'NIL':entry.balance, 'Total Donations (₹)': entry.totalDonations
+      });
+    }
+    const wb = XLSX.utils.book_new();
+    const wsEntry = XLSX.utils.json_to_sheet(entryRows);
+    const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+    wsEntry['!cols'] = [{wch:6},{wch:12},{wch:14},{wch:22},{wch:20},{wch:10},{wch:10},{wch:14},{wch:14},{wch:13},{wch:13},{wch:13},{wch:14},{wch:12},{wch:20}];
+    wsSummary['!cols'] = [{wch:14},{wch:22},{wch:20},{wch:10},{wch:10},{wch:14},{wch:14},{wch:13},{wch:16},{wch:14},{wch:16}];
+    XLSX.utils.book_append_sheet(wb, wsEntry, 'Fee Entry');
+    XLSX.utils.book_append_sheet(wb, wsSummary, 'Student Summary');
+    XLSX.writeFile(wb, `SDU_ITI_Fee_Backup_${todayStr()}.xlsx`);
+    msgEl.textContent = `Backup saved: SDU_ITI_Fee_Backup_${todayStr()}.xlsx`;
+  }catch(e){
+    console.error(e);
+    msgEl.textContent = 'Something went wrong creating the backup.';
+  }
+}
+
+/* ================= INIT ================= */
+async function initDashboard(){
+  document.getElementById('payDate').value = todayStr();
+  await fetchAllStudents();
+  renderIdLists();
+  renderSummary();
+  renderAdmissionsTable();
+  renderMasterTable();
+}
+</script>
+</body>
+</html>
