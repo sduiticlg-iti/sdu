@@ -208,6 +208,7 @@
       <div class="row" style="margin-top:16px;">
         <button class="btn-gold" onclick="saveAdmission()">Save Student Details</button>
         <button class="btn-ghost" onclick="clearAdmissionForm()">Clear Form</button>
+        <button class="btn-danger-link" style="border:1px solid var(--red);border-radius:8px;padding:10px 18px;" onclick="deleteStudent(document.getElementById('adId').value.trim())">Delete Student</button>
       </div>
       <div id="admMsg" class="msg"></div>
       <datalist id="idListA"></datalist>
@@ -217,7 +218,7 @@
       <h2><span class="eyebrow">All</span> Admitted Students</h2>
       <input id="admFilter" placeholder="Filter by name or admission no..." oninput="renderAdmissionsTable()">
       <table>
-        <thead><tr><th>Admission No</th><th>Name</th><th>Father/Guardian</th><th>Class</th><th>Session</th><th>Trade</th><th>Contact</th></tr></thead>
+        <thead><tr><th>Admission No</th><th>Name</th><th>Father/Guardian</th><th>Class</th><th>Session</th><th>Trade</th><th>Contact</th><th></th></tr></thead>
         <tbody id="admissionsBody"></tbody>
       </table>
       <div class="hint" id="admEmpty">No students admitted yet.</div>
@@ -239,7 +240,7 @@
       <div class="row">
         <div class="field"><label>Admission No</label><input list="idListF" id="payId" placeholder="e.g. ITI101" oninput="livePreview()"></div>
         <div class="field"><label>Date</label><input id="payDate" type="date"></div>
-        <div class="field"><label>Fee Amount (₹)</label><input id="payAmount" type="number" min="0" placeholder="0"></div>
+        <div class="field"><label>Monthly Fee (₹)</label><input id="payAmount" type="number" min="0" placeholder="0"></div>
         <div class="field"><label>Donation (₹) — optional</label><input id="payDonation" type="number" min="0" placeholder="0"></div>
         <div class="field grow"><label>Remarks</label><input id="payRemarks" placeholder="e.g. 2nd installment"></div>
         <button class="btn-gold" onclick="handlePaymentSubmit()">Save Payment</button>
@@ -268,7 +269,7 @@
         <div class="figure"><div class="label">Donations Received</div><div class="value" id="dDonations">₹0</div></div>
       </div>
       <table>
-        <thead><tr><th>Date</th><th>Fee</th><th>Donation</th><th>Total</th><th>Remarks</th><th>Balance After</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Monthly Fee</th><th>Donation</th><th>Total</th><th>Remarks</th><th>Balance After</th><th></th></tr></thead>
         <tbody id="historyBody"></tbody>
       </table>
       <div class="hint" id="historyEmpty">No payments recorded yet.</div>
@@ -612,7 +613,33 @@ function renderAdmissionsTable(){
     <tr class="clickable" onclick="loadIntoAdmissionForm('${s.id}')">
       <td>${s.id}</td><td>${s.name}</td><td>${s.father||'—'}</td><td>${s.className||'—'}</td>
       <td>${s.session||'—'}</td><td>${s.course}</td><td>${s.contact||'—'}</td>
+      <td><button class="btn-danger-link" onclick="event.stopPropagation(); deleteStudent('${s.id}')">Delete</button></td>
     </tr>`).join('');
+}
+
+async function deleteStudent(id){
+  if(!id){
+    document.getElementById('admMsg').textContent = 'Enter or select an Admission No first.';
+    document.getElementById('admMsg').className = 'msg err';
+    return;
+  }
+  const existing = await getStudentDoc(id);
+  if(!existing){
+    document.getElementById('admMsg').textContent = `No student found with Admission No "${id}".`;
+    document.getElementById('admMsg').className = 'msg err';
+    return;
+  }
+  if(!confirm(`Permanently delete ${existing.name} (${id}) and all their payment history? This cannot be undone.`)) return;
+
+  await db.collection('students').doc(id).delete();
+
+  document.getElementById('admMsg').textContent = `Deleted: ${existing.name} (${id})`;
+  document.getElementById('admMsg').className = 'msg ok';
+  clearAdmissionForm();
+  await fetchAllStudents();
+  renderIdLists(); renderSummary(); renderAdmissionsTable(); renderMasterTable(); renderYearTotals();
+
+  document.getElementById('detailCard').classList.add('hidden');
 }
 
 async function tryLoadForEdit(){
@@ -827,7 +854,7 @@ async function exportToExcel(){
           'Sl.No': slNo++, 'Date': p.date, 'Admission No': entry.id, 'Student Name': d.name,
           "Father's/Guardian Name": d.father||'', 'Class': d.className||'', 'Session': d.session||'',
           'Contact': d.contact||'', 'Trade': d.course, 'Monthly Fees Total (₹)': d.totalFee,
-          'Fee Amount (₹)': p.amount, 'Donation (₹)': donation, 'Total Amount (₹)': p.amount+donation,
+          'Monthly Fee Paid (₹)': p.amount, 'Donation (₹)': donation, 'Total Amount (₹)': p.amount+donation,
           'Balance (₹)': balAfter<=0?'NIL':balAfter, 'Remarks': p.remarks||''
         });
       }
