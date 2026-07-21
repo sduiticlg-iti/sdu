@@ -629,10 +629,9 @@ async function fetchAllStudents(){
     const d = doc.data();
     const totalPaid = (d.payments||[]).reduce((s,p)=>s+p.amount, 0);
     const totalDonations = (d.payments||[]).reduce((s,p)=>s+(p.donation||0), 0);
-    const totalPaidCombined = totalPaid + totalDonations; // fee + donation together, for "Paid/Collected" display
     const donationTarget = d.donationTarget || 0;
     return {id: doc.id, name: d.name, father: d.father||'', className: d.className||'', session: d.session||'',
-             contact: d.contact||'', course: d.course, totalFee: d.totalFee, donationTarget, totalPaid, totalDonations, totalPaidCombined,
+             contact: d.contact||'', course: d.course, totalFee: d.totalFee, donationTarget, totalPaid, totalDonations,
              balance: d.totalFee - totalPaid, // balance stays fee-only, unaffected by donations
              donationBalance: donationTarget - totalDonations};
   });
@@ -656,7 +655,7 @@ function renderIdLists(){
 }
 function renderSummary(){
   document.getElementById('statCount').textContent = studentsCache.length;
-  document.getElementById('statCollected').textContent = fmt(studentsCache.reduce((s,x)=>s+x.totalPaidCombined,0));
+  document.getElementById('statCollected').textContent = fmt(studentsCache.reduce((s,x)=>s+x.totalPaid,0));
   document.getElementById('statPending').textContent = fmt(studentsCache.reduce((s,x)=>s+Math.max(x.balance,0),0));
   document.getElementById('statDonations').textContent = fmt(studentsCache.reduce((s,x)=>s+x.totalDonations,0));
 }
@@ -821,7 +820,7 @@ async function showDetail(id){
   if(d.contact) bits.push(d.contact);
   document.getElementById('dProfile').textContent = bits.join(' · ') || '';
   document.getElementById('dTotal').textContent = fmt(d.totalFee);
-  document.getElementById('dPaid').textContent = fmt(totalPaid + totalDonations);
+  document.getElementById('dPaid').textContent = fmt(totalPaid);
   document.getElementById('dBalance').textContent = balance <= 0 ? 'NIL' : fmt(balance);
   document.getElementById('dDonationTarget').textContent = fmt(donationTarget);
   document.getElementById('dDonations').textContent = fmt(totalDonations);
@@ -914,7 +913,7 @@ function renderMasterTable(){
   document.getElementById('masterBody').innerHTML = rows.map(s => `
     <tr class="clickable" onclick="switchTab('fees'); document.getElementById('payId').value='${s.id}'; livePreview();">
       <td>${s.id}</td><td>${s.name}</td><td>${s.className||'—'}</td><td>${s.session||'—'}</td><td>${s.course}</td>
-      <td>${fmt(s.totalFee)}</td><td>${fmt(s.totalPaidCombined)}</td>
+      <td>${fmt(s.totalFee)}</td><td>${fmt(s.totalPaid)}</td>
       <td>${s.balance<=0?'<span class="pill nil">NIL</span>':'<span class="pill due">'+fmt(s.balance)+'</span>'}</td>
       <td>${fmt(s.totalDonations)}</td>
       <td>${s.donationTarget<=0?'—':(s.donationBalance<=0?'<span class="pill nil">NIL</span>':'<span class="pill due">'+fmt(s.donationBalance)+'</span>')}</td>
@@ -930,7 +929,7 @@ function renderYearTotals(){
   const body = document.getElementById('yearTotalsBody');
   body.innerHTML = Object.entries(groups).map(([label, list]) => {
     const totalFee = list.reduce((s,x)=>s+x.totalFee, 0);
-    const collected = list.reduce((s,x)=>s+x.totalPaidCombined, 0);
+    const collected = list.reduce((s,x)=>s+x.totalPaid, 0);
     const pending = list.reduce((s,x)=>s+Math.max(x.balance,0), 0);
     const donations = list.reduce((s,x)=>s+x.totalDonations, 0);
     return `<tr>
@@ -967,7 +966,7 @@ async function exportToExcel(){
       summaryRows.push({
         'Admission No': entry.id, 'Student Name': d.name, "Father's/Guardian Name": d.father||'',
         'Class': d.className||'', 'Session': d.session||'', 'Contact': d.contact||'', 'Trade': d.course,
-        'Monthly Fees Total (₹)': d.totalFee, 'Total Deposited (₹)': entry.totalPaidCombined,
+        'Monthly Fees Total (₹)': d.totalFee, 'Fees Collected (₹)': entry.totalPaid,
         'Balance Due (₹)': entry.balance<=0?'NIL':entry.balance,
         'Total Donation Target (₹)': entry.donationTarget, 'Donations Received (₹)': entry.totalDonations,
         'Donation Balance (₹)': entry.donationTarget <= 0 ? '—' : (entry.donationBalance<=0?'NIL':entry.donationBalance)
