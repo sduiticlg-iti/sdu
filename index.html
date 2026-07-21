@@ -133,6 +133,45 @@
     .tabbar{flex-wrap:wrap;}
     .tabbtn{flex:1 1 45%;}
   }
+
+  /* ---------- Visual polish ---------- */
+  body{background:linear-gradient(180deg,var(--cream) 0%,#F5F1E8 100%) fixed;}
+
+  .card{transition:box-shadow .2s ease, transform .15s ease;}
+  .card:hover{box-shadow:0 4px 16px rgba(20,33,61,.09);}
+  .card.primary{box-shadow:0 2px 10px rgba(201,154,61,.15);}
+
+  button{transition:background .15s ease, transform .08s ease, box-shadow .15s ease;}
+  .btn-primary{box-shadow:0 2px 6px rgba(20,33,61,.25);}
+  .btn-primary:hover{box-shadow:0 4px 12px rgba(20,33,61,.32);transform:translateY(-1px);}
+  .btn-gold{box-shadow:0 2px 6px rgba(201,154,61,.3);}
+  .btn-gold:hover{box-shadow:0 4px 14px rgba(201,154,61,.4);transform:translateY(-1px);}
+  .btn-ghost:hover{background:rgba(20,33,61,.04);}
+
+  .field input,.field select{transition:border-color .15s ease, box-shadow .15s ease;}
+
+  .stat{transition:transform .15s ease, box-shadow .2s ease;}
+  .stat:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(20,33,61,.1);}
+
+  .stamp{box-shadow:0 2px 6px rgba(0,0,0,.06);}
+  .stamp.paid{position:relative;}
+  .stamp.due{position:relative;}
+
+  tr.clickable{transition:background .12s ease;}
+
+  .pill{box-shadow:inset 0 0 0 1px rgba(0,0,0,.04);}
+
+  header{box-shadow:0 4px 20px rgba(20,33,61,.25);}
+  .tabbtn{transition:background .15s ease, color .15s ease, border-color .15s ease;}
+
+  ::-webkit-scrollbar{height:8px;width:8px;}
+  ::-webkit-scrollbar-thumb{background:#D8D0BC;border-radius:8px;}
+  ::-webkit-scrollbar-thumb:hover{background:var(--gold);}
+
+  #loginScreen{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+  .login-box{animation:slideUp .35s cubic-bezier(.22,1,.36,1);}
+  @keyframes slideUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
 </style>
 </head>
 <body>
@@ -257,16 +296,36 @@
           <div class="hint" id="dSub">—</div>
           <div class="hint" id="dProfile">—</div>
         </div>
-        <div class="stamp" id="dStamp">—</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+            <div class="stamp" id="dStamp">—</div>
+            <div class="stamp" id="dDonationStamp">—</div>
+          </div>
+          <button class="btn-ghost" style="font-size:11px;padding:6px 12px;" onclick="openEditBalance()">✎ Edit Balance / Details</button>
+        </div>
       </div>
+
+      <div class="newstudent-block hidden" id="editBalanceBlock">
+        <span class="flag">Editing balance figures</span>
+        <div class="row">
+          <div class="field"><label>Monthly Fees Total (₹)</label><input id="ebFee" type="number" min="0"></div>
+          <div class="field"><label>Total Donation Target (₹)</label><input id="ebDonationTarget" type="number" min="0"></div>
+        </div>
+        <div class="row" style="margin-top:14px;">
+          <button class="btn-gold" onclick="saveEditBalance()">Save Changes</button>
+          <button class="btn-ghost" onclick="cancelEditBalance()">Cancel</button>
+        </div>
+      </div>
+
       <div class="figures" style="grid-template-columns:repeat(3,1fr);">
         <div class="figure"><div class="label">Monthly Fees Total</div><div class="value" id="dTotal">₹0</div></div>
         <div class="figure"><div class="label">Previously Paid</div><div class="value" id="dPaid">₹0</div></div>
         <div class="figure"><div class="label">Balance Due</div><div class="value" id="dBalance">₹0</div></div>
       </div>
-      <div class="figures" style="grid-template-columns:repeat(2,1fr);margin-top:0;">
+      <div class="figures" style="grid-template-columns:repeat(3,1fr);margin-top:0;">
         <div class="figure"><div class="label">Total Donation (Target)</div><div class="value" id="dDonationTarget">₹0</div></div>
         <div class="figure"><div class="label">Donations Received</div><div class="value" id="dDonations">₹0</div></div>
+        <div class="figure"><div class="label">Donation Balance</div><div class="value" id="dDonationBalance">₹0</div></div>
       </div>
       <table>
         <thead><tr><th>Date</th><th>Monthly Fee</th><th>Donation</th><th>Total</th><th>Remarks</th><th>Balance After</th><th></th></tr></thead>
@@ -298,7 +357,7 @@
       <h2><span class="eyebrow">All</span> Every Student — Fee Status</h2>
       <input id="masterFilter" placeholder="Filter by name or admission no..." oninput="renderMasterTable()">
       <table>
-        <thead><tr><th>Admission No</th><th>Name</th><th>Class</th><th>Session</th><th>Trade</th><th>Monthly Fees Total</th><th>Paid</th><th>Balance</th><th>Donations</th></tr></thead>
+        <thead><tr><th>Admission No</th><th>Name</th><th>Class</th><th>Session</th><th>Trade</th><th>Monthly Fees Total</th><th>Paid</th><th>Balance</th><th>Donations</th><th>Donation Balance</th></tr></thead>
         <tbody id="masterBody"></tbody>
       </table>
       <div class="hint" id="masterEmpty">No students added yet.</div>
@@ -741,12 +800,17 @@ async function handlePaymentSubmit(){
   document.getElementById('payRemarks').value = '';
 }
 
+let currentDetailId = null;
+
 async function showDetail(id){
   const d = await getStudentDoc(id);
   if(!d) return;
+  currentDetailId = id;
   const totalPaid = (d.payments||[]).reduce((s,p)=>s+p.amount, 0);
   const totalDonations = (d.payments||[]).reduce((s,p)=>s+(p.donation||0), 0);
   const balance = d.totalFee - totalPaid;
+  const donationTarget = d.donationTarget || 0;
+  const donationBalance = donationTarget - totalDonations;
 
   document.getElementById('dName').textContent = d.name;
   document.getElementById('dSub').textContent = `${id} · ${d.course}`;
@@ -759,15 +823,56 @@ async function showDetail(id){
   document.getElementById('dTotal').textContent = fmt(d.totalFee);
   document.getElementById('dPaid').textContent = fmt(totalPaid + totalDonations);
   document.getElementById('dBalance').textContent = balance <= 0 ? 'NIL' : fmt(balance);
-  document.getElementById('dDonationTarget').textContent = fmt(d.donationTarget || 0);
+  document.getElementById('dDonationTarget').textContent = fmt(donationTarget);
   document.getElementById('dDonations').textContent = fmt(totalDonations);
+  document.getElementById('dDonationBalance').textContent = donationTarget <= 0 ? '—' : (donationBalance <= 0 ? 'NIL' : fmt(donationBalance));
 
   const stampEl = document.getElementById('dStamp');
-  if(balance <= 0){ stampEl.textContent = 'PAID IN FULL'; stampEl.className = 'stamp paid'; }
+  if(balance <= 0){ stampEl.textContent = 'FEES PAID'; stampEl.className = 'stamp paid'; }
   else { stampEl.textContent = fmt(balance) + ' DUE'; stampEl.className = 'stamp due'; }
 
+  const donationStampEl = document.getElementById('dDonationStamp');
+  if(donationTarget <= 0){
+    donationStampEl.textContent = 'NO DONATION TARGET';
+    donationStampEl.className = 'stamp';
+    donationStampEl.style.borderColor = 'var(--muted)'; donationStampEl.style.color = 'var(--muted)'; donationStampEl.style.background = '#F2F2F2';
+  } else if(donationBalance <= 0){
+    donationStampEl.textContent = 'DONATION COMPLETE';
+    donationStampEl.className = 'stamp paid'; donationStampEl.style = '';
+  } else {
+    donationStampEl.textContent = fmt(donationBalance) + ' DONATION DUE';
+    donationStampEl.className = 'stamp due'; donationStampEl.style = '';
+  }
+
+  document.getElementById('editBalanceBlock').classList.add('hidden');
   renderHistory(id, d);
   document.getElementById('detailCard').classList.remove('hidden');
+}
+
+function openEditBalance(){
+  if(!currentDetailId) return;
+  const totalEl = document.getElementById('dTotal').textContent.replace(/[₹,]/g,'');
+  const donEl = document.getElementById('dDonationTarget').textContent.replace(/[₹,]/g,'');
+  document.getElementById('ebFee').value = totalEl === '—' ? '' : totalEl;
+  document.getElementById('ebDonationTarget').value = donEl === '—' ? '' : donEl;
+  document.getElementById('editBalanceBlock').classList.remove('hidden');
+  document.getElementById('editBalanceBlock').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+function cancelEditBalance(){
+  document.getElementById('editBalanceBlock').classList.add('hidden');
+}
+async function saveEditBalance(){
+  if(!currentDetailId) return;
+  const totalFee = parseFloat(document.getElementById('ebFee').value) || 0;
+  const donationTarget = parseFloat(document.getElementById('ebDonationTarget').value) || 0;
+  if(!totalFee){
+    alert('Monthly Fees Total is required.');
+    return;
+  }
+  await saveStudentDoc(currentDetailId, {totalFee, donationTarget});
+  await fetchAllStudents();
+  renderIdLists(); renderSummary(); renderMasterTable(); renderYearTotals(); renderAdmissionsTable();
+  await showDetail(currentDetailId);
 }
 
 function renderHistory(id, d){
@@ -812,6 +917,7 @@ function renderMasterTable(){
       <td>${fmt(s.totalFee)}</td><td>${fmt(s.totalPaidCombined)}</td>
       <td>${s.balance<=0?'<span class="pill nil">NIL</span>':'<span class="pill due">'+fmt(s.balance)+'</span>'}</td>
       <td>${fmt(s.totalDonations)}</td>
+      <td>${s.donationTarget<=0?'—':(s.donationBalance<=0?'<span class="pill nil">NIL</span>':'<span class="pill due">'+fmt(s.donationBalance)+'</span>')}</td>
     </tr>`).join('');
 }
 
@@ -863,7 +969,8 @@ async function exportToExcel(){
         'Class': d.className||'', 'Session': d.session||'', 'Contact': d.contact||'', 'Trade': d.course,
         'Monthly Fees Total (₹)': d.totalFee, 'Total Deposited (₹)': entry.totalPaidCombined,
         'Balance Due (₹)': entry.balance<=0?'NIL':entry.balance,
-        'Total Donation Target (₹)': entry.donationTarget, 'Donations Received (₹)': entry.totalDonations
+        'Total Donation Target (₹)': entry.donationTarget, 'Donations Received (₹)': entry.totalDonations,
+        'Donation Balance (₹)': entry.donationTarget <= 0 ? '—' : (entry.donationBalance<=0?'NIL':entry.donationBalance)
       });
     }
     const wb = XLSX.utils.book_new();
